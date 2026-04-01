@@ -30,6 +30,8 @@ public class TypeAnnotationPass extends Pass<Void> {
 
    @Override
    public Void visitType(Absyn.Type node) {
+      super.visitType(node);
+
        // Here is how I checked if the type needed ARRAY or a LIST:
        // Feel free to use it or change it. 
       boolean isARRAY = node.brackets.list.stream()
@@ -38,12 +40,41 @@ public class TypeAnnotationPass extends Pass<Void> {
          .allMatch(e -> ((Absyn.ArrayType)e).size instanceof Absyn.DecLit);
       if (!isARRAY && !isLIST && node.brackets.list.size() != 0) 
          throw new TypeCheckException("Array has invalid parameters in []");
-
+      
       Type basetype = node.name.equals("int") ? new INT() :
                   node.name.equals("string") ? new STRING() :
                   node.name.equals("void") ? new VOID() :
                   new ALIAS(node.name);
+      for (int i = 0; i < node.pointerCount; i++) {
+         basetype = new POINTER(basetype);
+      }
 
+      Type result = basetype;
+
+      if (node.brackets.list.size() > 0) {
+         if (isARRAY) {
+            for (int i = 0; i < node.brackets.list.size(); i++) {
+               result = new ARRAY(result);
+            } 
+         }
+         else if (isLIST) {
+            for (Object obj : node.brackets.list) {
+               Absyn.ArrayType at = (Absyn.ArrayType) obj;
+               int size = ((Absyn.DecLit) at.size).value;
+
+               ArrayList<Type> elements = new ArrayList<>();
+               for (int i = 0; i < size; i++) {
+                  elements.add(result);
+               }
+
+               result = new LIST(elements);
+            }
+         }
+      }
+
+      node.typeAnnotation = result;
+      
+      return null;
 
    }
 } 
