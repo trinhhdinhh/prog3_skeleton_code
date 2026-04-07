@@ -42,16 +42,15 @@ public class JudgementsPass extends ScopePass<Void> {
             );
          }
 
-         // Block: ARRAY declared with mismatched LIST initializer
          if (declType instanceof ARRAY && initType instanceof LIST) {
             LIST list = (LIST) initType;
             ARRAY arr = (ARRAY) declType;
-            boolean ok = list.typelist.stream().allMatch(e -> arr.type.canAccept(e));
-            if (!ok) {
-               throw new TypeCheckException(
-                       "type mismatch in variable declaration: cannot assign " +
-                               initType + " to " + declType
-               );
+            if (declType instanceof ARRAY && initType instanceof LIST) {
+               if (!matchArray(declType, initType)) {
+                  throw new TypeCheckException(
+                          "array initializer does not match declared dimensions/type"
+                  );
+               }
             }
          } else if (!declType.canAccept(initType)) {
             throw new TypeCheckException(
@@ -61,6 +60,22 @@ public class JudgementsPass extends ScopePass<Void> {
          }
       }
       return null;
+   }
+
+   private boolean matchArray(Type expected, Type actual) {
+      if (expected instanceof ARRAY) {
+         if (!(actual instanceof LIST)) return false;
+
+         LIST list = (LIST) actual;
+         for (Type t : list.typelist) {
+            if (!matchArray(((ARRAY) expected).type, t)) {
+               return false;
+            }
+         }
+         return true;
+      } else {
+         return expected.canAccept(actual);
+      }
    }
 
    // -----------------------------------------------------------------------
@@ -127,13 +142,13 @@ public class JudgementsPass extends ScopePass<Void> {
       switch (node.oper) {
          case "+": case "-": case "*": case "/":
          case "==": case "!=": case "<": case ">": case "<=": case ">=":
-            if (!(node.left.typeAnnotation instanceof INT)) {
+            if (!new INT().canAccept(node.left.typeAnnotation)) {
                throw new TypeCheckException(
                        "binary '" + node.oper + "' requires INT left operand, got " +
                                node.left.typeAnnotation
                );
             }
-            if (!(node.right.typeAnnotation instanceof INT)) {
+            if (!new INT().canAccept(node.right.typeAnnotation)) {
                throw new TypeCheckException(
                        "binary '" + node.oper + "' requires INT right operand, got " +
                                node.right.typeAnnotation
@@ -185,12 +200,12 @@ public class JudgementsPass extends ScopePass<Void> {
    }
 
    // -----------------------------------------------------------------------
-   // If / While — condition must be a number (INT, which includes POINTER)
+   // If / While — condition must be a number
    // -----------------------------------------------------------------------
    @Override
    public Void visitIfStmt(IfStmt node) {
-      super.visitIfStmt(node); // ScopePass switches scope + visits children
-      if (!(node.expression.typeAnnotation instanceof INT)) {
+      super.visitIfStmt(node);
+      if (!new INT().canAccept(node.expression.typeAnnotation)) {
          throw new TypeCheckException(
                  "if condition must be INT, got " + node.expression.typeAnnotation
          );
@@ -200,8 +215,8 @@ public class JudgementsPass extends ScopePass<Void> {
 
    @Override
    public Void visitWhileStmt(WhileStmt node) {
-      super.visitWhileStmt(node); // ScopePass switches scope + visits children
-      if (!(node.expression.typeAnnotation instanceof INT)) {
+      super.visitWhileStmt(node);
+      if (!new INT().canAccept(node.expression.typeAnnotation)) {
          throw new TypeCheckException(
                  "while condition must be INT, got " + node.expression.typeAnnotation
          );
@@ -211,8 +226,8 @@ public class JudgementsPass extends ScopePass<Void> {
 
    // -----------------------------------------------------------------------
    // Unary expression
-   //   !  -  : operand must be INT (numbers), result is INT
-   //   &     : address-of any term → POINTER(T)
+   //   !  -  :  must be INT, result is INT
+   //   &     : address-of any term to POINTER(T)
    //   *     : dereference — must specifically be POINTER, result is inner type
    // -----------------------------------------------------------------------
    @Override
